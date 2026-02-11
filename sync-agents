@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# sync-agents.sh
+# Synchronize CLAUDE.md <-> AGENTS.md and .claude/skills/ <-> .agents/skills/
+# for both the current directory (local) and the home directory (global).
+
+DRY_RUN=false
+RUN_LOCAL=false
+RUN_GLOBAL=false
+HARD_COPY=false
+NO_ARGS=false
+
+[[ $# -eq 0 ]] && NO_ARGS=true
+
+usage() {
+	cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Synchronize CLAUDE.md <-> AGENTS.md and .claude/skills/ <-> .agents/skills/
+for the current directory and/or the home directory.
+
+Options:
+  --local       Sync only the current directory
+  --global      Sync only the home directory (~/)
+  --dry-run     Show what would be done without making any changes
+  --hard        Copy files/directories instead of creating symlinks
+  -h, --help    Show this help message
+
+If neither --local nor --global is specified, both are run.
+EOF
+	exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--local)
+		RUN_LOCAL=true
+		shift
+		;;
+	--global)
+		RUN_GLOBAL=true
+		shift
+		;;
+	--dry-run)
+		DRY_RUN=true
+		shift
+		;;
+	--hard)
+		HARD_COPY=true
+		shift
+		;;
+	-h | --help) usage ;;
+	*)
+		echo "Error: Unknown option '$1'" >&2
+		echo "Run '$(basename "$0") --help' for usage." >&2
+		exit 1
+		;;
+	esac
+done
+
+# Default to dry-run when invoked with no arguments.
+if $NO_ARGS; then
+	DRY_RUN=true
+fi
+
+# Default: run both when neither flag is given.
+if ! $RUN_LOCAL && ! $RUN_GLOBAL; then
+	RUN_LOCAL=true
+	RUN_GLOBAL=true
+fi
+
+confirm() {
+	local msg="$1"
+	printf "  %s [y/N] " "$msg" >&2
+	read -r answer
+	[[ "$answer" =~ ^[Yy]$ ]]
+}
+
+do_link_or_copy() {
+	local src="$1"
+	local dst="$2"
+
+	mkdir -p "$(dirname "$dst")"
+	if $HARD_COPY; then
+		if [[ -d "$src" ]]; then
+			cp -r "$src" "$dst"
+		else
+			cp "$src" "$dst"
+		fi
+	else
+		ln -s "$src" "$dst"
+	fi
+}
+
+label_action() {
+	if $HARD_COPY; then
+		echo "copy"
+	else
+		echo "link"
+	fi
+}
+
+sync_item() {
+	local item_a="$1"
+	local item_b="$2"
+	local action
+	action="$(label_action)"
+
+	local a_exists=false
+	local b_exists=false
+	local a_is_link=false
+	local b_is_link=false
+
+	[[ -e "$item_a" || -L "$item_a" ]] && a_exists=true
+	[[ -e "$item_b" || -L "$item_b" ]] && b_exists=true
+	[[ -L "$item_a" ]] && a_is_link=true
+	[[ -L "$item_b" ]] && b_is_link=true
+
+	# Already linked to each other — nothing to do (only relevant for symlink mode).
+	if ! $HARD_COPY && $a_exists && $b_exists; then
+		if $a_is_link && [[ "$(readlink "$item_a")" == "$item_b" ]]; then
+			echo "  [ok]    $item_a -> $item_b (already linked)"
+			return
+		fi
+		if $b_is_link && [[ "$(readlink "$item_b")" == "$item_a" ]]; then
+			echo "  [ok]    $item_b -> $item_a (already linked)"
+			return
+		fi
+	fi
+
+	if $a_exists && $b_exists; then
+		echo "  [skip]  Both $item_a and $item_b exist independently. Resolve manually."
+		return
+	fi
+
+	if $a_exists && ! $b_exists; then
+		if $DRY_RUN; then
+			echo "  [dry]   Would $action $item_b <- $item_a"
+		else
+			if confirm "$action $item_b <- $item_a?"; then
+				do_link_or_copy "$item_a" "$item_b"
+				echo "  [$action]  $item_b <- $item_a"
+			else
+				echo "  [skip]  Skipped by user."
+			fi
+		fi
+		return
+	fi
+
+	if $b_exists && ! $a_exists; then
+		if $DRY_RUN; then
+			echo "  [dry]   Would $action $item_a <- $item_b"
+		else
+			if confirm "$action $item_a <- $item_b?"; then
+				do_link_or_copy "$item_b" "$item_a"
+				echo "  [$action]  $item_a <- $item_b"
+			else
+				echo "  [skip]  Skipped by user."
+			fi
+		fi
+		return
+	fi
+
+	echo "  [skip]  Neither $item_a nor $item_b exists. Nothing to do."
+}
+
+if $DRY_RUN && $NO_ARGS; then
+	echo "(no arguments — running in dry-run mode, use --local/--global to apply changes)"
+elif $DRY_RUN; then
+	echo "(dry-run mode — no changes will be made)"
+fi
+if $HARD_COPY; then
+	echo "(hard-copy mode — copying instead of symlinking)"
+fi
+echo ""
+
+# --- Local (current directory) ---
+if $RUN_LOCAL; then
+	echo "=== Local: $(pwd) ==="
+
+	echo "--- CLAUDE.md <-> AGENTS.md ---"
+	sync_item "CLAUDE.md" "AGENTS.md"
+
+	echo "--- .claude/skills/ <-> .agents/skills/ ---"
+	sync_item ".claude/skills" ".agents/skills"
+
+	echo ""
+fi
+
+# --- Global (home directory) ---
+if $RUN_GLOBAL; then
+	echo "=== Global: $HOME ==="
+
+	echo "--- ~/.claude/CLAUDE.md <-> ~/.codex/AGENTS.md ---"
+	sync_item "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"
+
+	echo "--- ~/.claude/skills/ <-> ~/.agents/skills/ ---"
+	sync_item "$HOME/.claude/skills" "$HOME/.agents/skills"
+
+	echo ""
+fi
+
+echo "Done."
