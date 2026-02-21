@@ -10,6 +10,8 @@ RUN_LOCAL=false
 RUN_GLOBAL=false
 HARD_COPY=false
 NO_ARGS=false
+SYNC_CONFIG=true
+SYNC_SKILLS=true
 
 [[ $# -eq 0 ]] && NO_ARGS=true
 
@@ -21,13 +23,16 @@ Synchronize CLAUDE.md <-> AGENTS.md and .claude/skills/ <-> .agents/skills/
 for the current directory and/or the home directory.
 
 Options:
-  --local       Sync only the current directory
-  --global      Sync only the home directory (~/)
-  --dry-run     Show what would be done without making any changes
-  --hard        Copy files/directories instead of creating symlinks
-  -h, --help    Show this help message
+  --local        Sync only the current directory
+  --global       Sync only the home directory (~/)
+  --skills-only  Sync only .claude/skills/ <-> .agents/skills/ (skip AGENTS.md/CLAUDE.md)
+  --config-only  Sync only CLAUDE.md <-> AGENTS.md (skip skills directories)
+  --dry-run      Show what would be done without making any changes
+  --hard         Copy files/directories instead of creating symlinks
+  -h, --help     Show this help message
 
 If neither --local nor --global is specified, both are run.
+If neither --skills-only nor --config-only is specified, both config and skills are synced.
 EOF
 	exit 0
 }
@@ -40,6 +45,14 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--global)
 		RUN_GLOBAL=true
+		shift
+		;;
+	--skills-only)
+		SYNC_CONFIG=false
+		shift
+		;;
+	--config-only)
+		SYNC_SKILLS=false
 		shift
 		;;
 	--dry-run)
@@ -69,6 +82,9 @@ if ! $RUN_LOCAL && ! $RUN_GLOBAL; then
 	RUN_LOCAL=true
 	RUN_GLOBAL=true
 fi
+
+# --skills-only and --config-only are mutually exclusive in effect (each turns off the other half).
+# If both were given, last one wins; if neither, both SYNC_CONFIG and SYNC_SKILLS stay true.
 
 confirm() {
 	local msg="$1"
@@ -179,11 +195,14 @@ echo ""
 if $RUN_LOCAL; then
 	echo "=== Local: $(pwd) ==="
 
-	echo "--- CLAUDE.md <-> AGENTS.md ---"
-	sync_item "CLAUDE.md" "AGENTS.md"
-
-	echo "--- .claude/skills/ <-> .agents/skills/ ---"
-	sync_item ".claude/skills" ".agents/skills"
+	if $SYNC_CONFIG; then
+		echo "--- CLAUDE.md <-> AGENTS.md ---"
+		sync_item "CLAUDE.md" "AGENTS.md"
+	fi
+	if $SYNC_SKILLS; then
+		echo "--- .claude/skills/ <-> .agents/skills/ ---"
+		sync_item ".claude/skills" ".agents/skills"
+	fi
 
 	echo ""
 fi
@@ -192,11 +211,14 @@ fi
 if $RUN_GLOBAL; then
 	echo "=== Global: $HOME ==="
 
-	echo "--- ~/.claude/CLAUDE.md <-> ~/.codex/AGENTS.md ---"
-	sync_item "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"
-
-	echo "--- ~/.claude/skills/ <-> ~/.agents/skills/ ---"
-	sync_item "$HOME/.claude/skills" "$HOME/.agents/skills"
+	if $SYNC_CONFIG; then
+		echo "--- ~/.claude/CLAUDE.md <-> ~/.codex/AGENTS.md ---"
+		sync_item "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"
+	fi
+	if $SYNC_SKILLS; then
+		echo "--- ~/.claude/skills/ <-> ~/.agents/skills/ ---"
+		sync_item "$HOME/.claude/skills" "$HOME/.agents/skills"
+	fi
 
 	echo ""
 fi

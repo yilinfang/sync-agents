@@ -13,6 +13,8 @@ By default it creates symlinks; with `--hard` it copies instead.
 ./sync-agents              # Preview changes (dry-run, no arguments)
 ./sync-agents --local      # Sync only current directory
 ./sync-agents --global     # Sync only home directory
+./sync-agents --skills-only # Sync only .claude/skills/ <-> .agents/skills/
+./sync-agents --config-only # Sync only CLAUDE.md <-> AGENTS.md
 ./sync-agents --dry-run    # Explicitly preview without changes
 ./sync-agents --hard       # Copy instead of symlink
 ```

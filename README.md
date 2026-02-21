@@ -19,11 +19,13 @@ By default it creates **symlinks**; with `--hard` it copies instead. The Claude-
 ./sync-agents              # Preview changes (dry-run, no arguments)
 ./sync-agents --local      # Sync only current directory
 ./sync-agents --global     # Sync only home directory
+./sync-agents --skills-only # Sync only .claude/skills/ <-> .agents/skills/
+./sync-agents --config-only # Sync only CLAUDE.md <-> AGENTS.md
 ./sync-agents --dry-run    # Explicitly preview without changes
 ./sync-agents --hard       # Copy instead of symlink
 ```
 
-Running with **no arguments** defaults to dry-run mode so you can safely preview what would happen. Pass `--local`, `--global`, or both to actually apply changes.
+Running with **no arguments** defaults to dry-run mode so you can safely preview what would happen. Pass `--local`, `--global`, or both to actually apply changes. Use `--skills-only` or `--config-only` to sync only skills directories or only the config files (AGENTS.md/CLAUDE.md).
 
 When applying changes, each create/link/copy operation prompts for confirmation (`[y/N]`) before proceeding.
 
