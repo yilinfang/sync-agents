@@ -8,6 +8,8 @@ set -euo pipefail
 DRY_RUN=false
 RUN_LOCAL=false
 RUN_GLOBAL=false
+RUN_ALL=false
+LOCAL_FLAG_USED=false
 HARD_COPY=false
 NO_ARGS=false
 SYNC_CONFIG=true
@@ -23,15 +25,17 @@ Synchronize CLAUDE.md <-> AGENTS.md and .claude/skills/ <-> .agents/skills/
 for the current directory and/or the home directory.
 
 Options:
-  --local        Sync only the current directory
+  --local        Deprecated: local is already the default scope
   --global       Sync only the home directory (~/)
+  --all          Sync both current directory and home directory
   --skills-only  Sync only .claude/skills/ <-> .agents/skills/ (skip AGENTS.md/CLAUDE.md)
   --config-only  Sync only CLAUDE.md <-> AGENTS.md (skip skills directories)
   --dry-run      Show what would be done without making any changes
   --hard         Copy files/directories instead of creating symlinks
   -h, --help     Show this help message
 
-If neither --local nor --global is specified, both are run.
+Default scope is local. Use --global for home only, --all for both,
+or --local --global together for both.
 If neither --skills-only nor --config-only is specified, both config and skills are synced.
 EOF
 	exit 0
@@ -41,10 +45,15 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--local)
 		RUN_LOCAL=true
+		LOCAL_FLAG_USED=true
 		shift
 		;;
 	--global)
 		RUN_GLOBAL=true
+		shift
+		;;
+	--all)
+		RUN_ALL=true
 		shift
 		;;
 	--skills-only)
@@ -77,10 +86,23 @@ if $NO_ARGS; then
 	DRY_RUN=true
 fi
 
-# Default: run both when neither flag is given.
-if ! $RUN_LOCAL && ! $RUN_GLOBAL; then
+# Scope selection:
+# - default (no scope flags) and --local only: local
+# - --global only: global
+# - --all: both
+# - --local --global: both
+if $RUN_ALL; then
 	RUN_LOCAL=true
 	RUN_GLOBAL=true
+elif $RUN_LOCAL && $RUN_GLOBAL; then
+	RUN_LOCAL=true
+	RUN_GLOBAL=true
+elif $RUN_GLOBAL; then
+	RUN_LOCAL=false
+	RUN_GLOBAL=true
+else
+	RUN_LOCAL=true
+	RUN_GLOBAL=false
 fi
 
 # --skills-only and --config-only are mutually exclusive in effect (each turns off the other half).
@@ -182,9 +204,12 @@ sync_item() {
 }
 
 if $DRY_RUN && $NO_ARGS; then
-	echo "(no arguments — running in dry-run mode, use --local/--global to apply changes)"
+	echo "(no arguments — running in dry-run mode, use --local/--global/--all to apply changes)"
 elif $DRY_RUN; then
 	echo "(dry-run mode — no changes will be made)"
+fi
+if $LOCAL_FLAG_USED; then
+	echo "(deprecated) --local is deprecated; local is already the default scope." >&2
 fi
 if $HARD_COPY; then
 	echo "(hard-copy mode — copying instead of symlinking)"

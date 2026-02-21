@@ -10,16 +10,18 @@ By default it creates symlinks; with `--hard` it copies instead.
 ## Running
 
 ```bash
-./sync-agents              # Preview changes (dry-run, no arguments)
-./sync-agents --local      # Sync only current directory
-./sync-agents --global     # Sync only home directory
+./sync-agents               # Preview changes (dry-run, default scope is local)
+./sync-agents --local       # Deprecated: same as default local scope
+./sync-agents --global      # Sync only home directory
+./sync-agents --all         # Sync both current directory and home directory
+./sync-agents --local --global # Sync both local and global
 ./sync-agents --skills-only # Sync only .claude/skills/ <-> .agents/skills/
 ./sync-agents --config-only # Sync only CLAUDE.md <-> AGENTS.md
-./sync-agents --dry-run    # Explicitly preview without changes
-./sync-agents --hard       # Copy instead of symlink
+./sync-agents --dry-run     # Explicitly preview without changes
+./sync-agents --hard        # Copy instead of symlink
 ```
 
-Running with no arguments defaults to dry-run. Pass `--local`, `--global`, or both to apply changes. Each create/link/copy operation prompts for user confirmation.
+Running with no arguments defaults to dry-run. Scope defaults to local. Use `--global` for global only, `--all` for both, or `--local --global` for both. `--local` is kept for compatibility but deprecated. Each create/link/copy operation prompts for user confirmation.
 
 ## Architecture
 
