@@ -42,13 +42,26 @@ For each pair of paths the script:
 
 ## Installation
 
+Run without downloading (one-liner; pass flags after `--`, e.g. `--global`, `--all`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yilinfang/sync-agents/main/sync-agents | bash -s -- --dry-run
+```
+
+If you prefer not to pipe directly to `bash`, download first and inspect:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yilinfang/sync-agents/main/sync-agents -o sync-agents
+less sync-agents
 chmod +x sync-agents
+./sync-agents --dry-run
 ```
 
 Or clone the repo:
 
 ```bash
 git clone https://github.com/yilinfang/sync-agents.git
+cd sync-agents
+chmod +x sync-agents
+./sync-agents --dry-run
 ```
