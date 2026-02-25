@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # sync-agents.sh
-# Synchronize CLAUDE.md <-> AGENTS.md and .claude/skills/ <-> .agents/skills/
+# Synchronize AGENTS.md, CLAUDE.md locally and globally.
+# Globally, also synchronize with GEMINI.md.
+# Synchronize .agents/skills/, .claude/skills/, .gemini/antigravity/skills/
 # for both the current directory (local) and the home directory (global).
 
 DRY_RUN=false
@@ -21,15 +23,15 @@ usage() {
 	cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Synchronize CLAUDE.md <-> AGENTS.md and .claude/skills/ <-> .agents/skills/
-for the current directory and/or the home directory.
+Synchronize AGENTS.md and CLAUDE.md (and GEMINI.md globally),
+and their respective skills directories for the current directory and/or home.
 
 Options:
   --local        Deprecated: local is already the default scope
   --global       Sync only the home directory (~/)
   --all          Sync both current directory and home directory
-  --skills-only  Sync only .claude/skills/ <-> .agents/skills/ (skip AGENTS.md/CLAUDE.md)
-  --config-only  Sync only CLAUDE.md <-> AGENTS.md (skip skills directories)
+  --skills-only  Sync only skills directories (skip config files)
+  --config-only  Sync only config files (skip skills directories)
   --dry-run      Show what would be done without making any changes
   --hard         Copy files/directories instead of creating symlinks
   -h, --help     Show this help message
@@ -139,68 +141,75 @@ label_action() {
 	fi
 }
 
-sync_item() {
-	local item_a="$1"
-	local item_b="$2"
+sync_group() {
+	local items=("$@")
+	local existing=()
+	local missing=()
 	local action
 	action="$(label_action)"
 
-	local a_exists=false
-	local b_exists=false
-	local a_is_link=false
-	local b_is_link=false
-
-	[[ -e "$item_a" || -L "$item_a" ]] && a_exists=true
-	[[ -e "$item_b" || -L "$item_b" ]] && b_exists=true
-	[[ -L "$item_a" ]] && a_is_link=true
-	[[ -L "$item_b" ]] && b_is_link=true
-
-	# Already linked to each other — nothing to do (only relevant for symlink mode).
-	if ! $HARD_COPY && $a_exists && $b_exists; then
-		if $a_is_link && [[ "$(readlink "$item_a")" == "$item_b" ]]; then
-			echo "  [ok]    $item_a -> $item_b (already linked)"
-			return
+	for item in "${items[@]}"; do
+		if [[ -e "$item" || -L "$item" ]]; then
+			existing+=("$item")
+		else
+			missing+=("$item")
 		fi
-		if $b_is_link && [[ "$(readlink "$item_b")" == "$item_a" ]]; then
-			echo "  [ok]    $item_b -> $item_a (already linked)"
-			return
-		fi
-	fi
+	done
 
-	if $a_exists && $b_exists; then
-		echo "  [skip]  Both $item_a and $item_b exist independently. Resolve manually."
+	if [[ ${#existing[@]} -eq 0 ]]; then
+		echo "  [skip]  None of the items exist (${items[*]}). Nothing to do."
 		return
 	fi
 
-	if $a_exists && ! $b_exists; then
+	local source="${existing[0]}"
+	local has_conflict=false
+
+	# Check all existing items for conflicts (against source and each other).
+	if [[ ${#existing[@]} -gt 1 ]]; then
+		for item in "${existing[@]:1}"; do
+			if ! $HARD_COPY; then
+				local src_is_link=false
+				local item_is_link=false
+				[[ -L "$source" ]] && src_is_link=true
+				[[ -L "$item" ]] && item_is_link=true
+
+				if $item_is_link && [[ "$(readlink "$item")" == "$source" ]]; then
+					echo "  [ok]    $item -> $source (already linked)"
+				elif $src_is_link && [[ "$(readlink "$source")" == "$item" ]]; then
+					echo "  [ok]    $source -> $item (already linked)"
+				elif $item_is_link && $src_is_link && [[ "$(readlink "$source")" == "$(readlink "$item")" ]]; then
+					echo "  [ok]    $source and $item share the same target (already linked)"
+				else
+					echo "  [skip]  Both $source and $item exist independently. Resolve manually."
+					has_conflict=true
+				fi
+			else
+				echo "  [skip]  Both $source and $item exist independently. Resolve manually."
+				has_conflict=true
+			fi
+		done
+	fi
+
+	# Don't create missing items when conflicts exist among existing ones.
+	if $has_conflict; then
+		if [[ ${#missing[@]} -gt 0 ]]; then
+			echo "  [skip]  Skipping missing items (${missing[*]}) due to unresolved conflicts above."
+		fi
+		return
+	fi
+
+	for item in "${missing[@]}"; do
 		if $DRY_RUN; then
-			echo "  [dry]   Would $action $item_b <- $item_a"
+			echo "  [dry]   Would $action $item <- $source"
 		else
-			if confirm "$action $item_b <- $item_a?"; then
-				do_link_or_copy "$item_a" "$item_b"
-				echo "  [$action]  $item_b <- $item_a"
+			if confirm "$action $item <- $source?"; then
+				do_link_or_copy "$source" "$item"
+				echo "  [$action]  $item <- $source"
 			else
 				echo "  [skip]  Skipped by user."
 			fi
 		fi
-		return
-	fi
-
-	if $b_exists && ! $a_exists; then
-		if $DRY_RUN; then
-			echo "  [dry]   Would $action $item_a <- $item_b"
-		else
-			if confirm "$action $item_a <- $item_b?"; then
-				do_link_or_copy "$item_b" "$item_a"
-				echo "  [$action]  $item_a <- $item_b"
-			else
-				echo "  [skip]  Skipped by user."
-			fi
-		fi
-		return
-	fi
-
-	echo "  [skip]  Neither $item_a nor $item_b exists. Nothing to do."
+	done
 }
 
 if $DRY_RUN && $NO_ARGS; then
@@ -221,12 +230,12 @@ if $RUN_LOCAL; then
 	echo "=== Local: $(pwd) ==="
 
 	if $SYNC_CONFIG; then
-		echo "--- CLAUDE.md <-> AGENTS.md ---"
-		sync_item "CLAUDE.md" "AGENTS.md"
+		echo "--- AGENTS.md / CLAUDE.md ---"
+		sync_group "AGENTS.md" "CLAUDE.md"
 	fi
 	if $SYNC_SKILLS; then
-		echo "--- .claude/skills/ <-> .agents/skills/ ---"
-		sync_item ".claude/skills" ".agents/skills"
+		echo "--- .agents/skills / .claude/skills / .gemini/antigravity/skills ---"
+		sync_group ".agents/skills" ".claude/skills" ".gemini/antigravity/skills"
 	fi
 
 	echo ""
@@ -237,12 +246,12 @@ if $RUN_GLOBAL; then
 	echo "=== Global: $HOME ==="
 
 	if $SYNC_CONFIG; then
-		echo "--- ~/.claude/CLAUDE.md <-> ~/.codex/AGENTS.md ---"
-		sync_item "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"
+		echo "--- ~/.codex/AGENTS.md / ~/.claude/CLAUDE.md / ~/.gemini/GEMINI.md ---"
+		sync_group "$HOME/.codex/AGENTS.md" "$HOME/.claude/CLAUDE.md" "$HOME/.gemini/GEMINI.md"
 	fi
 	if $SYNC_SKILLS; then
-		echo "--- ~/.claude/skills/ <-> ~/.agents/skills/ ---"
-		sync_item "$HOME/.claude/skills" "$HOME/.agents/skills"
+		echo "--- ~/.agents/skills / ~/.claude/skills / ~/.gemini/antigravity/skills ---"
+		sync_group "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.gemini/antigravity/skills"
 	fi
 
 	echo ""
