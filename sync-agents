@@ -113,7 +113,7 @@ fi
 confirm() {
 	local msg="$1"
 	printf "  %s [y/N] " "$msg" >&2
-	read -r answer
+	read -r answer </dev/tty
 	[[ "$answer" =~ ^[Yy]$ ]]
 }
 
